@@ -12,4 +12,13 @@ app.use(express.json({limit:"16kb"})); // ager koi data fronted se json formate 
 app.use(express.urlencoded({extended:true,limit:"16kb"})); // URL except karne kai liye
 app.use(express.static("public")); // jaise koi file folder ya image aaya to usko pblic folder mai store karne kai liye
 app.use(cookieParser()); //cookie ek prakar se browsing history hi ho gaya jo ki web app apkai mobile ko ye small text file kai rup mai send karta hai aur ye app.use mai isliyai set kiyaai kyuki hamara server user kai cookie ko set and access kar paye
+
+
+// hum yaha router import kiyai hai kyu ki yaha ek middleware ka use kar rahe ki jase hi user http://localhost:8000/api/v1/users isme jaye userRouter call hoga aur ab waha par sab kuch hoga
+import userRouter from './routes/user.routes.js'
+
+app.use("/api/v1/users",userRouter);
+
+
+
 export {app};
