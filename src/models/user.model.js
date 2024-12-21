@@ -56,7 +56,7 @@ const userSchema=new Schema(
 userSchema.pre("save", async function (next){
    if(!this.isModified("password"))return next(); // ye line ka matlab hum ager userschema kai kisi bhi field ko change karegai to bar bar password encypt hoga kyuki 'pre' middleware hai isyai hum chatai hai ki jab password mai koi modification ho tabhi encrypt ho
 
-   this.password=bcrypt.hash("password",10);
+   this.password= await bcrypt.hash("password",10)
    next(); //'next' isliyai hai kyu ki jaise hi middlewarre chal gaya to baki ka kam karne kai liyai next ko call kar do
 })
  
