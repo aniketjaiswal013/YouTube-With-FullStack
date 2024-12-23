@@ -30,7 +30,7 @@ const userSchema=new Schema(
         required:true,
      },
      coverImage:{
-        type:string //  cloudinary url
+        type:String //  cloudinary url
      },
      watchHistory:[
         {
@@ -61,7 +61,7 @@ userSchema.pre("save", async function (next){
 })
  
 //hum password ko comapre karne cha rahe hai ki wo sahi hai ya nahi
-userSchema.methods.isCorrectPassword=async function(password) {
+userSchema.methods.isPasswordCorrect=async function(password) {
       return await bcrypt.compare(password,this.password); // password->jo user check ye login kai liyai bhejega this.password->jo ki encrypted and save hai database mai
 }
 
