@@ -3,16 +3,22 @@ import {ApiError} from "../utils/ApiError.js"
 import {User} from "../models/user.model.js"
 import {uploadOnCloudinary} from "../utils/cloudinary.js"
 import {ApiResponse} from "..//utils/ApiResponse.js"
+import jwt from "jsonwebtoken";
 
 const generateAccessAndRefreshTokens=async(userId)=>{
+  console.log(userId);
+  
   try {
       const user=await User.findById(userId);
-          const accessToken=user.generateAccessToken();
+      console.log(user);
+          const accessToken= user.generateAccessToken();
+          // console.log(user);
+          
          const refreshToken= user.generateRefreshToken();
 
          //database mai refresh token ko save karwane liya iska {validateBeforeSave:false} matlab kai save karne se pahelai wah password check magaiga isliyai {validateBeforeSave:false} se wah nahi bena password check kai save ho jayega
          user.refreshToken=refreshToken;
-         user.save({validateBeforeSave:false});
+         await user.save({validateBeforeSave:false});
 
          return {accessToken,refreshToken};
 
@@ -162,20 +168,25 @@ const loginUser=asyncHandler(async(req,res)=>{
     
       const {username,email,password}=req.body
 
-       if(!username||!email){
+       if(!username && !email){
         throw new ApiError(400,"username or email is required");
        }
 
-      const user=User.findOne({
+      const user=await User.findOne({
                      $or:[{username},{email}]
                          });
        if(!user){
         throw new ApiError(404,"user does not exist");
        }
-
+       console.log(user);
+       
+      //  console.log(passsword);
+       
        const isPasswordValid=await user.isPasswordCorrect(password);
+       console.log(isPasswordValid);
+       
        if(!isPasswordValid){
-        throw new ApiError(401,"password is incorrect");
+        throw new ApiError(401,"password is incorrect h");
        }
 
        const {accessToken,refreshToken}=await generateAccessAndRefreshTokens(user._id);
@@ -208,18 +219,18 @@ const logoutUser=asyncHandler(async(req,res)=>{
   // problem-> cookies clear karnai  and uskai refreshToken ko reset karnai kai liyai humko user ka access karna hoga but wo logout kai liyai kuch vejega to nahi isliyai humare req.body mai us user ka access bhi nahi hoga 
   // solution-> authintication ka middleware hai(auth.middleware.js) hum ex middleware design karegai logout kai just pahelai call hoga and us middle ware ka kaam hoga ki req mai user ko add kar do req ex object hi to hai to uskai user new property add kar degai 
   // middleware->iska kaam hota hai aage jane se pahele humse mil kai jana
-
-     User.findByIdAndUpdate(
-        await req.user._id,
+  await User.findByIdAndUpdate(
+        req.user._id,
         {
           $set:{
             refreshToken:undefined
-          },
+          }
+        },
           {
             //new:true se  response  mai jo value return hoga usmai  refreshToken:undefined hoga
             new:true
           }
-        }
+        
      )
 
      //cookies remove hoga yaha se
@@ -230,11 +241,57 @@ const logoutUser=asyncHandler(async(req,res)=>{
      res.status(200)
      .clearCookie("accessToken",option)
      .clearCookie("refreshToken",option)
-     .json(new ApiResponse(200,{},"user logged out"))
-})
+     .json(new ApiResponse(200,{},"user logged out"));
+});
+
+
+const refreshAccessToken=asyncHandler(async(req,res)=>{
+
+  //ye refresh token hum user kai pass se uthaigai uskai cookie ko access kar kai
+  const incomingRefreshToken=req.cookie?.refreshToken||req.body.refreshToken
+
+  if(!incomingRefreshToken){
+    throw new ApiError(401,"unauthorized refresh token");
+    
+  }
+  //cookie mai jo refresh token hota hai and uska key hai process.env.REFRESH_TOKEN_SECRET and is key ki madad se hum token ko decode kar kai user kai id,email,usename,fullName ko access kar saktai hai kyu user.model.js mai refresh token generate kartai samay hum ye sab store karwai thai aur ye sab access hum key se decode kar kai kar saktai hai
+try {
+  
+    const decodedToken=jwt.verify(incomingRefreshToken,process.env.REFRESH_TOKEN_SECRET);
+    const user=await User.findById(decodedToken?._id)
+    if(!user){
+      throw new ApiError(401,"Invalid refresh token");
+    }
+    if(incomingRefreshToken!==user?.refreshToken){
+      throw new ApiError(404,"refresh token is expierd or used")
+    }
+  
+    const {accessToken,newRefreshToken}=await generateAccessAndRefreshTokens(user?._id);
+    const option={
+      httpOnly:true,
+      secure:true
+     }
+     res.status(200)
+     .cookie("accessToken",accessToken,option)
+     .cookie("refreshToken",newRefreshToken,option)
+     .json(
+      new ApiResponse(200,
+        {
+         accessToken,refreshToken:newRefreshToken
+        }
+        ,
+        "Access Token refreshed"
+      ));
+} catch (error) {
+    throw new ApiError(401,error?.message||"invalid refresh token")
+}
+
+});
+
 
 export {
   registerUser,
   loginUser,
-  logoutUser
+  logoutUser,
+  refreshAccessToken
 }
