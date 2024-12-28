@@ -120,7 +120,7 @@ if(req.files &&Array.isArray(req.files.coverImage)&& req.files.coverImage.length
     throw new ApiError(400,"Avatar file is required ram");
    }
  
-   //5.ye kya karega ki ye jo avatar ka jo ser mai url tha wo ab cloudinary mai upload karega jo hum log define kiyai hai function cloudinary.js mai aur avatar chuki required feild hai isliayi usko ek baar phir se check kar laigai ki nahi to database hi fat jayega
+   //5.ye kya karega ki ye jo avatar ka jo server mai url tha wo ab cloudinary mai upload karega jo hum log define kiyai hai function cloudinary.js mai aur avatar chuki required feild hai isliayi usko ek baar phir se check kar laigai ki nahi to database hi fat jayega
     const avatar= await uploadOnCloudinary(avatarLocalPath);
     //cloudinary ko ager coverImage nahi milai to wo empty string return kar deta hai
      const coverImage=await uploadOnCloudinary(coverImageLocalPath);
@@ -244,7 +244,6 @@ const logoutUser=asyncHandler(async(req,res)=>{
      .json(new ApiResponse(200,{},"user logged out"));
 });
 
-
 const refreshAccessToken=asyncHandler(async(req,res)=>{
 
   //ye refresh token hum user kai pass se uthaigai uskai cookie ko access kar kai
@@ -288,10 +287,221 @@ try {
 
 });
 
+const changeCurrentPassword=asyncHandler(async(req,res)=>{
+
+     const {oldPassword,newPassword}=req.body
+     // ager user conformPassword bhi vejta hai to bas ek check lagana padega
+    //  if(newPassword!==conformPassword){
+    //   throw new ApiError(400,"newPassword and conformPassword are not same");
+    //  }
+
+     //user apna password change kar paa raha matlab wo login hai ar ager wo login hai to verifyJWT wala middleware run hua hai jisk kaam hai req mai user ko inject kar dena ab hum waha se user ko find out kar payegai
+     const user=await User.findById(req.user?._id);
+     const isPasswordCorrect=await user.isPasswordCorrect(oldPassword);
+     if(!isPasswordCorrect){
+      throw new ApiError(400,"Invalid old password");
+     }
+     user.password=newPassword;
+    await user.save({validateBeforeSave:false});
+   return res.status(200)
+    .json(
+      new ApiResponse(200,{},"Password changed Sucessfully")
+    )
+})
+
+const getCurrentUser=asyncHandler(async(req,res)=>{
+  // user ager logged in hai to usko user dena koi badi baat nahi hi kyu ki verifyJWT to user ko req mai inject kar diya hai 
+  return res.status(200).json(new ApiResponse(200,req.user,"current user fatched successfully"))
+
+});
+
+const updateAccountDetails=asyncHandler(async(req,res)=>{
+  const {fullName,email}=req.body
+  if(!fullName || !email){
+    throw new ApiError(400,"All feilds are required");
+  }
+      const user=await User.findByIdAndUpdate(
+        req.user?._id,
+        {
+           $set:{
+               fullName:fullName,
+               email:email
+           }
+        },
+        {
+          //new ko true karne ka matlab hai ki jo bhi value update hua hai upadate hane kai baad user ka jo updated details hai wo return ho jayega
+          new:true
+        }
+       ).select("-password");
+
+       return res
+       .status(200)
+       .json(new ApiResponse(200,user,"Account details updated successfully"));
+});
+
+const updateUserAvatar=asyncHandler(async(req,res)=>{
+  const avatarLocalPath=req.file?.path;
+  if(!avatarLocalPath){
+    throw new ApiError(400,"Avatar file is missing");
+  }
+ const avatar=await uploadOnCloudinary(avatarLocalPath);
+ if(!avatar.url){
+  throw new ApiError(400,"Error while uploading on cloudinary");
+ }
+
+    const user =await User.findByIdAndUpdate(
+      //user chuki login hai isliyai hum avatar ko update kar pa rahe hai isliyai hum aur user login hai matlab verifyJWT chala hai aur wo user ko inject kar diya hai req mai
+         req.user?._id,
+         {
+            $set:{
+              avatar:avatar.url
+            }
+         },
+         {
+          new:true
+         }
+    ).select("-password")
+    return res
+    .status(200)
+    .json(
+      new ApiResponse(200,user,"Avatar updated successfully")
+    );
+})
+
+const updateUserCoverImage=asyncHandler(async(req,res)=>{
+  const coverImageLocalPath=req.file?.path;
+  if(!coverImageLocalPath){
+    throw new ApiError(400,"Avatar file is missing");
+  }
+ const coverImage=await uploadOnCloudinary(coverImageLocalPath);
+ if(!coverImage.url){
+  throw new ApiError(400,"Error while uploading on cloudinary");
+ }
+
+    const user =await User.findByIdAndUpdate(
+      //user chuki login hai isliyai hum avatar ko update kar pa rahe hai isliyai hum aur user login hai matlab verifyJWT chala hai aur wo user ko inject kar diya hai req mai
+         req.user?._id,
+         {
+            $set:{
+              coverImage:coverImage.url
+            }
+         },
+         {
+          new:true
+         }
+    ).select("-password")
+    return res
+    .status(200)
+    .json(
+      new ApiResponse(200,user,"Cover Image updated successfully")
+    );
+})
+
+
+
+//mongoDB mai jaise haumko subscriber and channel ko nikalna hai to jaise user- a,b,c,d chanel- CAC,HCC,FCC to jab bhi koi user kisi channel ko subscribe karta hai mongoDB mai ek object banta hai {channel-CAC,subscriber-a} ,{channel-CAC,subscriber-b}{channel-CAC,subscriber-c},{channel-HCC,subscriber-c},{channel-FCC,subscriber-c} to ek channel ka multiple subscriber ho sakta hai and ek subscriber multi channel ko subscribe kar sakta hai to 
+//NB:- ager humko subscriber find out karna hai to humko channel ko count karegai jase CAC ka kithana subscriber hai to count this {channel-CAC,subscriber-a} ,{channel-CAC,subscriber-b}{channel-CAC,subscriber-c}
+//NB:- ager humko  find out karna hai wo kitha channel ko subscribe kiya hai  to us id wala kitana channel ko subscribe kiya hai wo find out karna hoga  ager pata karna hai ki c kisko kisko subscribe kiya hai to count this  {channel-CAC,subscriber-c},{channel-HCC,subscriber-c},{channel-FCC,subscriber-c}
+
+// Aggregation Pipelines:- koi DB mai ager data store hai aur us data kai uper hum koi operation perform karwana cha rahe hai jaise humko iss id ka student de do ya left join karwa do is student id ka total kitna student hai ye find out karna hai to ye humko way provide karta hai is hum pipeline ko ek kai baad ek stage kar kai likhaigai aur har stage ka jo input hai wah privious stage ka output se aaye hoga jase humko koi particular student id ka data ko aage wala stage mai pass kar deyai ab us particular student id wata student mai hum kuch operation perform karwaigai
+//for more info on Aggregation Pipelines visit this(https://www.mongodb.com/resources/products/capabilities/aggregation-pipeline)
+
+const getUserChannelProfile=asyncHandler(async(req,res)=>{
+  //user profile mai return karegai user ka (username,email,fullName, avater,coverImage,subscriber,subscribedTo,)
+  //subscriber,subscribedTo ko find out karne kai liyai Aggregation Pipelines lagana padega
+  
+  
+  // user ek end point hit karega matlab ek url mai jaiga to us url se hum username nikalegai isliyai req.params
+ const {username}=req.params
+
+ if(!username?.trim()){
+  throw new ApiError(400,"username is missing");
+ }
+
+   // to ab humko usename milgaya hai ab hum usmai Aggregation Pipelines laga kar subscriber,subscribedTo find out kar saktai hai 
+  const channel= await User.aggregate([
+       {
+        //ye match pipe line ka kaam hai ki jo bhi users hai User database mai usmai se hum username(jo ki humko url se mila hai) usko return karega aur usko hum aage pass kar degai ye one sing user hi return karega jo ki uss username ko match karta ho 
+        $match:{
+          username:username?.toLowerCase()
+        }
+       },
+       {
+        // lookup ka kaam hai ki jase mere pass do table hai ek User and ek subscription to user mai jo username hai usko kitna jan subscribe kiya hai wo nikalana chatai hai to uss username ka subscription table mai kitna channel hai ager ye pata chal jaye to hum usko count kar legai aur humko subscriber mil jayega to lookup ek join ki tarah kaam karega username ko jake subscription table kai channel mai ja kai khojega 
+        $lookup:{
+          // abhi hum User mai hai aur from matlab kaha se join karna hai matlab humko subscriptions table se join ksrna hai 
+          from:"subscriptions", //chuki DB mai name ase hi save hota hai
+          localField:"_id",  //matlab hamare pass jo usename hai uska id aur wahi id subscription table kai channel mai hoga tabhi to wo channel ko koi subscribe kiya hoga (NB- channel bhi ek user hi hai )
+          foreignField:"channel", //iss channel mai uss username ka id hai jo ki url se aaye hai 
+          as:"subscribers" // to ye ek feild/attribute ban jaye ga jisme subscriptions table ka wo wo elment hoga jiska channel mai jo id hai wo username kai id se match karta ho
+        }
+
+       }
+       ,
+       {
+        // hum ismai findout kar rehe hai ki humko kitne jan ne subscribe kiya hai 
+          $lookup:{
+            from:"subscriptions",
+            localField:"_id",
+            foreignField:"subscriber", // subscriptions table kai  subscriber feild mai jo id hai uska matlab hai ki subscriber feild ka wo id us channle ko subscribe kiya hai jo us element mai hai to kitna mai url kai username wala id subscriber mai kitnibaar aaye hai wo nikal le to kaam ho jayega
+            as:"subscribedTo"
+          }
+       },
+       {
+        // User model ka jo sechema hai usmai feild/attribute add kar deta hai to usmai hum subscriber and subscribedTo two feild add karwaigai
+        $addFields:{
+             subscribersCount:{
+              $size:"$subscriber" //subscriber kai pahle $ isliyai laga hai kyu ki wo feild ban gaya hai aur uskai ander wo wo ele hoga jiska channel mai jo id hai wo username kai id se match karta ho ab usko $size ki maddad se count kar legai wahi uska subscriber hoga 
+             },
+             channelSubscribedToCount:{
+              $size:"$subscribedTo"
+             },
+             isSubscribed:{
+              // iss feild mai ye check hoga ki ager hum kisika profile check kar rehai hai to ager hum usko subscribe kar deyai hai to true assign hoga isSubscribed mai nahi to false  to isko check kai liyai
+                $cond:{
+                  if:{$in:[req.user?._id,"$subscribers.subscriber"]}, // chuki user login hai tabhi dusra ka profile check kar paa raha hai to hum user ka id ko subscribers ka jo object return hua hai usmai check kare gai uskai subscriber arrtibute mai ager mil gaya matlab hum jo profile check kar raha hai usne jisko profile check kar raha hai uako subscribe kiya hai 
+                  then:true,
+                  else:false
+                }
+             }
+        }
+       },
+       {
+        //project ka kaam hai ki kon sa feild ko vejna hai uani return karna hai 
+        $project:{
+          fullName:1,
+          username:1,
+          subscribersCount:1,
+          channelSubscribedToCount:1,
+          isSubscribed:1,
+          avatar:1,
+          coverImage:1,
+          email:1
+        }
+       }
+   ]);
+
+   // ek baar channel ko console.log karwana hai
+   if(!channel?.length){
+    throw new ApiError(404, "channel does not exists")
+   }
+
+   return res
+   .status(200)
+   .json(
+    new ApiResponse(200,channel[0],"user channel fatched successfully")
+   )
+})
+
 
 export {
   registerUser,
   loginUser,
   logoutUser,
-  refreshAccessToken
+  refreshAccessToken,
+  changeCurrentPassword,
+  getCurrentUser,
+  updateAccountDetails,
+  updateUserAvatar,
+  updateUserCoverImage
 }

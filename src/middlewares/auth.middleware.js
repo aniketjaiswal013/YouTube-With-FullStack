@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 
 export const verifyJWT=asyncHandler(async(req,res,next)=>{
    try {
-     // hum app.js mai app.use(cookieParser()); ye middleware use kiyai hai to ye req mai cookies ka access de dega
+     // hum app.js mai app.use(cookieParser()); ye middleware use kiyai hai to ye req mai cookies ka access de dega jab bhi hum middleware add kartai hai to wah req mai uska access de deta hai use kai karan hum cookies ka access through req kar pp rahe hai
      const token=req.cookies?.accessToken || req.header("Authorization")?.replace("Bearer ","");
      if(!token){
          throw new ApiError(401,"unauthorize request")
