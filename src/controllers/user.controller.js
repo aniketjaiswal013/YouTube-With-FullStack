@@ -491,7 +491,76 @@ const getUserChannelProfile=asyncHandler(async(req,res)=>{
    .json(
     new ApiResponse(200,channel[0],"user channel fatched successfully")
    )
-})
+});
+
+
+const getWatchHistory=asyncHandler(async(req,res)=>{
+  //chuki user login hai tabhi hum uska watch history nikal paa rahe hai
+  //watch history find karne kai liyai kuch step hai
+  // step 1:- wo user ko find karo jiska watch history nikalna chahetai ho wo hum match pipeline se kar sakte hai kyuki login hone ki wajah se jo id req.user._id mila hai usko match pipeline se pure user model kai har element mai kojega aur wo user ko findout kar lega 
+  //step 2:- chuki hum user model kai watch history mai video model ka id insert karwa rahe hai to humko ek join lagana hoga ki humko wo wo video model ka ele de do jo hamere user kai watch history mai jiska id hai to humko wo wo video ka detais mil jayega but abhi bhi ek problem hai
+  //step 3:- video model mai ek owner feild hai jo ki uss user ka details rakha hai jo uss video ko post kiya hai to ab uss video ka owner ka details nikalee kai liyai nested join lagana padega kyuki pahe to humko watch history mai kon kon video hai uska list milgya ab phir owner and user mai join laga kar uss video ko post karne wale ka details mil gaya
+ const user=await User.aggregate([
+  //step-1    
+  {
+        $match:{
+          //mongoose.Types.ObjectId(req.user._id) ye iss liyai karna pda kyuki jo mongodb id generate karka hai wo ye '67688160b22e0b3bc5cd9a53'  hai but hum compare karne kai liyai pura ye chahiye ObjectId('67688160b22e0b3bc5cd9a53') uskai iyai niche wala line likhai
+          _id:new mongoose.Types.ObjectId(req.user._id)
+          //ye match kya karega ki jase hum apna watchHistory dekhana chahetai hai to ye mera user details aage pass kar dega
+        }
+      },
+      //step-2
+      {
+          $lookup:{
+            // abhi hum user mai hai and hum video model ka wo wo ele chahetai hai jo ki hamare watchHistory mai hai
+            from:"videos",
+            // chuki hum user model mai hai iss liyai humra local feild hua watchHistory
+            localField:"watchHistory",
+            // hum video model ka id apne watchHistory mai daal rehe hai iss liyai foreignField _id hua 
+            foreignField:"_id",
+            // ab watchHistory hai humko hamare watch history ka har video kar document mil gaya hai
+            as:"watchHistory",
+            //nested pipeline kyu ki hum video model mai owner field jo hai usmai bas user ka id pada hai jo user uss video ko post kiya hai par humko uss user ka details chaheye jo ki  humko owner and user model kai user id mai join laga kar hi milega
+            pipeline:[
+               {
+                // ismai abhi hum hai video model mai and join laga chetai hai user model se
+                $lookup:{
+                  from:"users",
+                  localField:"owner",
+                  foreignField:"_id",
+                  as:"owner",
+                  //ab iss owner mai pura detais aajayega par hum 3 hi field chaheyai fullName,usename,avatar is liyai project lagayegai
+                  pipeline:[
+                    {
+                      $project:{
+                        fullName:1,
+                        username:1,
+                        avatar:1
+                      }
+                    }
+                  ]
+                },
+               },
+               {
+                $addFields:{
+                  owner:{
+                    //ye owner field jo ki video model mai hai usmai uper mai pipeline se jo owner field mila tha jismai data array kai formate mai the usse pahela data jo ki hamara fullName,usename,avatar hai wo le legai and ye owner feild over write ho jayega 
+                    $frist:"$owner"
+                  }
+                }
+               }
+            ]
+          
+          }
+      }
+  ]);
+
+  return res
+  .status(200)
+  .json(
+    new ApiResponse(200,user[0].watchHistory,"Watch History fatched successfully")
+  )
+});
 
 
 export {
@@ -503,5 +572,8 @@ export {
   getCurrentUser,
   updateAccountDetails,
   updateUserAvatar,
-  updateUserCoverImage
+  updateUserCoverImage,
+  getUserChannelProfile,
+  getWatchHistory
+
 }

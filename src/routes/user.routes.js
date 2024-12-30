@@ -1,5 +1,20 @@
 import {Router} from "express";
-import { loginUser,logoutUser,registerUser,refreshAccessToken } from "../controllers/user.controller.js";
+import { loginUser,
+         logoutUser,
+         registerUser,
+         refreshAccessToken,
+         changeCurrentPassword,
+         getCurrentUser, 
+         updateAccountDetails,
+         updateUserAvatar,
+            updateUserCoverImage, 
+            getUserChannelProfile,
+            getWatchHistory
+        } 
+        from "../controllers/user.controller.js";
+
+
+        
 import {upload} from "../middlewares/multer.middleware.js"
 import {verifyJWT} from "../middlewares/auth.middleware.js"
 const router=Router();
@@ -23,5 +38,24 @@ router.route("/login").post(loginUser);
 router.route("/logout").post(verifyJWT,logoutUser);
 
 router.route("/refresh-token").post(refreshAccessToken);
+router.route("/change-password").post(verifyJWT,changeCurrentPassword);
+// chuki logged in user hi password change kar paayega isliyai verifyJWT
+router.route("/current-user").get(verifyJWT,getCurrentUser);
+
+
+//yaha patch hoga kyuki post karne se sab attribute ka details hi update ho jayega but hum kuch particular details update karwana cha rahe hai
+router.route("/update-account").patch(verifyJWT,updateAccountDetails);
+
+// ye upload.single("avatar") middleware hai jo ki hame server mai avtar ko upload karega jo ki fronted se aaya hai aur patch iss liyai kyuki only avatar update karwana hai pura user hi upadate nhai karwana
+router.route("/avatar").patch(verifyJWT,upload.single("avatar"),updateUserAvatar);
+
+router.route("/cover-image").patch(verifyJWT,upload.single("coverImage"),updateUserCoverImage);
+
+
+// ye jo /c/:username hai usmai ':' kai baad jo bhi hum username likhaigai wahi humko req.params kai destructure kiyai hua username mai milaiga 
+router.route("/c/:username").get(verifyJWT,getUserChannelProfile);
+router.route("/history").get(verifyJWT,getWatchHistory)
+
+
 
 export default router;
